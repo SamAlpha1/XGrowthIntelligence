@@ -25,19 +25,47 @@ def _target_keywords() -> list[str]:
     return [item.strip() for item in os.getenv("X_TARGET_KEYWORDS", "").split(",") if item.strip()]
 
 
+def _bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
 def command_metrics() -> int:
     settings = Settings.from_env()
     follower_error: str | None = None
+    post_sample_size = _bounded_env_int("X_POST_SAMPLE_SIZE", 5, 5, 100)
+    follower_sample_size = _bounded_env_int("X_FOLLOWER_SAMPLE_SIZE", 10, 0, 1000)
     client = XReadOnlyClient(settings)
     try:
-        user_payload = client.get_user_by_username(settings.x_username)
+        try:
+            user_payload = client.get_user_by_username(settings.x_username)
+        except XApiError as exc:
+            _write_summary(
+                "# XGrowthIntelligence — X API blocked\n\n"
+                "Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
+                f"Account requested: **@{settings.x_username}**\n\n"
+                f"Status: **{exc}**\n\n"
+                "No write action was performed.\n"
+            )
+            raise
+
         user = user_payload.get("data") or {}
         user_id = str(user.get("id", ""))
-        tweets_payload = client.get_recent_tweets(user_id, max_results=10) if user_id else {"data": []}
+        tweets_payload = client.get_recent_tweets(user_id, max_results=post_sample_size) if user_id else {"data": []}
         followers: list[dict[str, object]] = []
-        if user_id:
+        if user_id and follower_sample_size > 0:
             try:
-                followers = client.get_followers_bounded(user_id, max_pages=2, page_size=100)
+                followers = client.get_followers_bounded(
+                    user_id,
+                    max_pages=1,
+                    page_size=follower_sample_size,
+                )
             except XApiError as exc:
                 follower_error = str(exc)
     finally:
@@ -51,6 +79,8 @@ def command_metrics() -> int:
         "x_handle": "samalpha_",
         "account": user,
         "posts": posts,
+        "post_sample_limit": post_sample_size,
+        "follower_sample_limit": follower_sample_size,
         "follower_sample_size": len(followers),
         "follower_ranking_error": follower_error,
         "safety": {"x_write_actions": 0, "mode": "read_only"},
@@ -59,6 +89,7 @@ def command_metrics() -> int:
         "owner": "SamAlpha1",
         "x_handle": "samalpha_",
         "target_keywords": _target_keywords(),
+        "sample_limit": follower_sample_size,
         "sample_size": len(followers),
         "ranking_error": follower_error,
         "ranked_followers": smart_followers[:50],
@@ -79,8 +110,8 @@ def command_metrics() -> int:
         f"Verified followers: **{verified_followers}**  \n"
         f"Following: **{metrics.get('following_count', 'n/a')}**  \n"
         f"Posts: **{metrics.get('tweet_count', 'n/a')}**  \n"
-        f"Recent original posts sampled: **{len(posts)}**  \n"
-        f"Follower ranking input: **{follower_status}**\n\n"
+        f"Recent original posts sampled: **{len(posts)}** / limit {post_sample_size}  \n"
+        f"Follower ranking input: **{follower_status}** / limit {follower_sample_size}\n\n"
         "Recommendations are manual-only. No write action was performed.\n"
     )
     _write_summary(summary)
