@@ -1,0 +1,14 @@
+version: 1
+owner: SamAlpha1
+x_handle: samalpha_
+kind: project_heuristic
+note: These are project heuristics, not upstream X ranking weights.
+smart_follower:
+  relevance: 0.24
+  authority: 0.16
+  verification: 0.12
+  recency: 0.12
+  engagement_quality: 0.16
+  network_value: 0.10
+  conversion_likelihood: 0.10
+risk_penalty_max: 0.35
