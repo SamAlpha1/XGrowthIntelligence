@@ -1,7 +1,8 @@
 import httpx
+import pytest
 
 from xgrowth.settings import Settings
-from xgrowth.x_api import XReadOnlyClient
+from xgrowth.x_api import XApiError, XReadOnlyClient
 
 
 def test_user_lookup_is_get_only() -> None:
@@ -49,3 +50,22 @@ def test_follower_pagination_is_bounded_and_get_only() -> None:
     assert len(seen) == 2
     assert all(method == "GET" for method, _ in seen)
     assert all("/users/1/followers" in url for _, url in seen)
+
+
+def test_payment_required_fails_once_without_retry() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(402, json={"title": "Payment Required"})
+
+    settings = Settings(x_username="samalpha_", x_bearer_token="test-token", max_retries=5)
+    client = XReadOnlyClient(settings, transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(XApiError, match="credits are required"):
+            client.get_user_by_username("samalpha_")
+    finally:
+        client.close()
+
+    assert calls == 1
