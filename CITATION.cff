@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+title: XGrowthIntelligence
+message: "If you use this project, cite the repository and maintainer."
+type: software
+authors:
+  - name: SamAlpha1
+repository-code: "https://github.com/SamAlpha1/XGrowthIntelligence"
+url: "https://x.com/samalpha_"
+license: MIT
+version: 0.1.0
+date-released: 2026-09-13
