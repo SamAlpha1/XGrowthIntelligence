@@ -6,6 +6,11 @@ runtime:
   request_timeout_seconds: 15
   max_retries: 2
   workflow_timeout_minutes: 10
+metrics:
+  recent_posts_sample: 10
+  follower_pages: 2
+  follower_page_size: 100
+  target_keywords: []
 upstream:
   repository: xai-org/x-algorithm
   track:
