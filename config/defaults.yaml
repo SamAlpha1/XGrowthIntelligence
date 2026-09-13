@@ -1,0 +1,23 @@
+project:
+  owner: SamAlpha1
+  x_handle: samalpha_
+  mode: read_only
+runtime:
+  request_timeout_seconds: 15
+  max_retries: 2
+  workflow_timeout_minutes: 10
+upstream:
+  repository: xai-org/x-algorithm
+  track:
+    - phoenix/
+    - home-mixer/
+    - home-mixer/params/param.rs
+    - vm-ranker/
+    - grox/
+    - visibility-filtering/
+    - visibility-filtering-client/
+    - user-cred-v2/
+    - under-the-hood/
+privacy:
+  commit_user_analytics: false
+  sanitized_debug: true
