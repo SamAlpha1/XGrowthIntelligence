@@ -5,11 +5,12 @@ import json
 import os
 from pathlib import Path
 
+from .intelligence.follower_profile_ranker import rank_follower_profiles
 from .reporting.daily_report import build_daily_report
 from .settings import Settings
 from .upstream.diff_parser import classify_paths, meaningful_categories
 from .upstream.watcher import fetch_latest_snapshot
-from .x_api import XReadOnlyClient
+from .x_api import XApiError, XReadOnlyClient
 
 
 def _write_summary(markdown: str) -> None:
@@ -20,31 +21,56 @@ def _write_summary(markdown: str) -> None:
         print(markdown)
 
 
+def _target_keywords() -> list[str]:
+    return [item.strip() for item in os.getenv("X_TARGET_KEYWORDS", "").split(",") if item.strip()]
+
+
 def command_metrics() -> int:
     settings = Settings.from_env()
+    follower_error: str | None = None
     client = XReadOnlyClient(settings)
     try:
         user_payload = client.get_user_by_username(settings.x_username)
         user = user_payload.get("data") or {}
         user_id = str(user.get("id", ""))
         tweets_payload = client.get_recent_tweets(user_id, max_results=10) if user_id else {"data": []}
+        followers: list[dict[str, object]] = []
+        if user_id:
+            try:
+                followers = client.get_followers_bounded(user_id, max_pages=2, page_size=100)
+            except XApiError as exc:
+                follower_error = str(exc)
     finally:
         client.close()
 
     posts = tweets_payload.get("data") or []
+    smart_followers = rank_follower_profiles(followers, target_keywords=_target_keywords())
     report = build_daily_report(user, posts)
     snapshot = {
         "owner": "SamAlpha1",
         "x_handle": "samalpha_",
         "account": user,
         "posts": posts,
+        "follower_sample_size": len(followers),
+        "follower_ranking_error": follower_error,
         "safety": {"x_write_actions": 0, "mode": "read_only"},
+    }
+    smart_snapshot = {
+        "owner": "SamAlpha1",
+        "x_handle": "samalpha_",
+        "target_keywords": _target_keywords(),
+        "sample_size": len(followers),
+        "ranking_error": follower_error,
+        "ranked_followers": smart_followers[:50],
+        "scoring_note": "Project heuristic with explicit evidence coverage; missing features are not imputed.",
     }
     Path("metrics-snapshot.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
     Path("daily-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    Path("smart-followers.json").write_text(json.dumps(smart_snapshot, indent=2), encoding="utf-8")
 
     metrics = user.get("public_metrics") or {}
     verified_followers = user.get("verified_followers_count", "n/a")
+    follower_status = f"{len(followers)} sampled" if follower_error is None else "unavailable on current access"
     summary = (
         "# XGrowthIntelligence — Read-Only Metrics\n\n"
         "Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
@@ -53,7 +79,8 @@ def command_metrics() -> int:
         f"Verified followers: **{verified_followers}**  \n"
         f"Following: **{metrics.get('following_count', 'n/a')}**  \n"
         f"Posts: **{metrics.get('tweet_count', 'n/a')}**  \n"
-        f"Recent original posts sampled: **{len(posts)}**\n\n"
+        f"Recent original posts sampled: **{len(posts)}**  \n"
+        f"Follower ranking input: **{follower_status}**\n\n"
         "Recommendations are manual-only. No write action was performed.\n"
     )
     _write_summary(summary)
