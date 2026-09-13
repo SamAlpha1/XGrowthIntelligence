@@ -21,12 +21,16 @@ def test_source_contains_no_http_write_method_calls() -> None:
     assert violations == []
 
 
-def test_generated_user_analytics_are_not_git_tracked_paths() -> None:
-    forbidden_paths = {
-        Path("metrics-snapshot.json"),
-        Path("daily-report.json"),
-        Path("smart-followers.json"),
+def test_generated_analytics_are_gitignored() -> None:
+    generated_paths = {
+        "metrics-snapshot.json",
+        "daily-report.json",
+        "smart-followers.json",
+        "upstream-snapshot.json",
     }
-    ignore_text = Path(".gitignore").read_text(encoding="utf-8")
-    for path in forbidden_paths:
-        assert str(path) not in ignore_text or str(path) in ignore_text
+    ignored = {
+        line.strip()
+        for line in Path(".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert generated_paths.issubset(ignored)
