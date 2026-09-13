@@ -1,0 +1,31 @@
+name: Upstream Watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e .
+      - name: Check upstream
+        run: xgrowth upstream
+      - name: Preserve evidence snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-snapshot
+          path: upstream-snapshot.json
+          retention-days: 14
+          if-no-files-found: error
