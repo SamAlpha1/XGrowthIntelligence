@@ -1,0 +1,25 @@
+{
+  "owner": "SamAlpha1",
+  "x_handle": "samalpha_",
+  "account": {
+    "username": "example_account",
+    "followers": 1250,
+    "following": 310,
+    "posts": 840,
+    "verified": true,
+    "verified_type": "example"
+  },
+  "recent_posts_sampled": 10,
+  "manual_recommendations": [
+    {
+      "post_id": "example-post-id",
+      "meaningful_engagement_rate": 0.018,
+      "recommendation": "Review this post format/topic for a similar manual follow-up.",
+      "action_mode": "manual_only"
+    }
+  ],
+  "safety": {
+    "x_write_actions": 0,
+    "action_mode": "read_only_manual_recommendations"
+  }
+}
