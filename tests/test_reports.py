@@ -1,4 +1,5 @@
 from xgrowth.reporting.daily_report import build_daily_report
+from xgrowth.reporting.github_summary import render_daily_summary
 
 
 def test_daily_report_is_read_only_and_signed() -> None:
@@ -24,3 +25,7 @@ def test_daily_report_is_read_only_and_signed() -> None:
     assert report["x_handle"] == "samalpha_"
     assert report["safety"]["x_write_actions"] == 0
     assert report["manual_recommendations"][0]["action_mode"] == "manual_only"
+    summary = render_daily_summary(report)
+    assert "SamAlpha1" in summary
+    assert "@samalpha_" in summary
+    assert "No X write action" in summary
