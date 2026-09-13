@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 
+from .reporting.daily_report import build_daily_report
 from .settings import Settings
 from .upstream.diff_parser import classify_paths, meaningful_categories
 from .upstream.watcher import fetch_latest_snapshot
@@ -30,17 +31,30 @@ def command_metrics() -> int:
     finally:
         client.close()
 
+    posts = tweets_payload.get("data") or []
+    report = build_daily_report(user, posts)
+    snapshot = {
+        "owner": "SamAlpha1",
+        "x_handle": "samalpha_",
+        "account": user,
+        "posts": posts,
+        "safety": {"x_write_actions": 0, "mode": "read_only"},
+    }
+    Path("metrics-snapshot.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+    Path("daily-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+
     metrics = user.get("public_metrics") or {}
-    tweet_count = len(tweets_payload.get("data") or [])
+    verified_followers = user.get("verified_followers_count", "n/a")
     summary = (
         "# XGrowthIntelligence — Read-Only Metrics\n\n"
-        f"Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
+        "Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
         f"Account checked: **@{settings.x_username}**\n\n"
         f"Followers: **{metrics.get('followers_count', 'n/a')}**  \n"
+        f"Verified followers: **{verified_followers}**  \n"
         f"Following: **{metrics.get('following_count', 'n/a')}**  \n"
         f"Posts: **{metrics.get('tweet_count', 'n/a')}**  \n"
-        f"Recent original posts sampled: **{tweet_count}**\n\n"
-        "No write action was performed.\n"
+        f"Recent original posts sampled: **{len(posts)}**\n\n"
+        "Recommendations are manual-only. No write action was performed.\n"
     )
     _write_summary(summary)
     return 0
@@ -56,7 +70,7 @@ def command_upstream() -> int:
     categories_text = ", ".join(categories) if categories else "none"
     _write_summary(
         "# XGrowthIntelligence — Upstream Watch\n\n"
-        f"Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
+        "Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
         f"Commit: `{snapshot.sha}`  \n"
         f"Committed: `{snapshot.committed_at}`  \n"
         f"Tracked categories: **{categories_text}**\n\n"
