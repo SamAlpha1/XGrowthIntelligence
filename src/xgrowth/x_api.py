@@ -31,6 +31,17 @@ class XReadOnlyClient:
     def close(self) -> None:
         self._client.close()
 
+    @staticmethod
+    def _client_error_message(status_code: int) -> str:
+        messages = {
+            400: "X API rejected the read-only request as invalid",
+            401: "X API authentication failed; verify the Bearer Token",
+            402: "X API credits are required; add prepaid credits in the X Developer Console",
+            403: "X API denied access to this read-only endpoint for the current app",
+            404: "X API resource was not found",
+        }
+        return messages.get(status_code, f"X API returned non-retriable HTTP {status_code}")
+
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         url = f"{self.BASE_URL}{path}"
         enforce_readonly("GET", url)
@@ -40,22 +51,36 @@ class XReadOnlyClient:
         for attempt in range(attempts):
             try:
                 response = self._client.get(url, params=params)
-                if response.status_code == 429:
-                    if attempt + 1 >= attempts:
-                        raise XApiError("X API rate limit reached after bounded retries")
-                    retry_after = min(float(response.headers.get("retry-after", "1")), 5.0)
-                    time.sleep(max(retry_after, 0.0))
-                    continue
-                response.raise_for_status()
-                payload = response.json()
-                if not isinstance(payload, dict):
-                    raise XApiError("Unexpected X API response shape")
-                return payload
-            except (httpx.HTTPError, ValueError, XApiError) as exc:
+            except httpx.HTTPError as exc:
                 last_error = exc
                 if attempt + 1 >= attempts:
                     break
                 time.sleep(min(0.5 * (attempt + 1), 1.5))
+                continue
+
+            if response.status_code == 429:
+                if attempt + 1 >= attempts:
+                    raise XApiError("X API rate limit reached after bounded retries")
+                retry_after = min(float(response.headers.get("retry-after", "1")), 5.0)
+                time.sleep(max(retry_after, 0.0))
+                continue
+
+            if 400 <= response.status_code < 500:
+                raise XApiError(self._client_error_message(response.status_code))
+
+            try:
+                response.raise_for_status()
+                payload = response.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                last_error = exc
+                if attempt + 1 >= attempts:
+                    break
+                time.sleep(min(0.5 * (attempt + 1), 1.5))
+                continue
+
+            if not isinstance(payload, dict):
+                raise XApiError("Unexpected X API response shape")
+            return payload
 
         raise XApiError(f"Read-only request failed after {attempts} attempts") from last_error
 
