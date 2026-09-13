@@ -89,20 +89,47 @@ def command_metrics() -> int:
 
 def command_upstream() -> int:
     snapshot = fetch_latest_snapshot(token=os.getenv("GITHUB_TOKEN"))
-    signals = classify_paths(snapshot.relevant_files)
+    meaningful_paths = [
+        str(item["source_path"])
+        for item in snapshot.change_evidence
+        if item.get("meaningful") is True
+    ]
+    ignored_paths = [
+        str(item["source_path"])
+        for item in snapshot.change_evidence
+        if item.get("meaningful") is False
+    ]
+    uncertain_paths = [
+        str(item["source_path"])
+        for item in snapshot.change_evidence
+        if item.get("meaningful") is None
+    ]
+    signals = classify_paths(meaningful_paths)
     categories = meaningful_categories(signals)
-    payload = snapshot.as_dict() | {"meaningful_categories": list(categories)}
+    payload = snapshot.as_dict() | {
+        "meaningful_categories": list(categories),
+        "meaningful_paths": meaningful_paths,
+        "ignored_nonsemantic_paths": ignored_paths,
+        "uncertain_paths": uncertain_paths,
+    }
     Path("upstream-snapshot.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    files = "\n".join(f"- `{path}`" for path in snapshot.relevant_files) or "- No tracked paths changed"
+    meaningful_text = "\n".join(f"- `{path}`" for path in meaningful_paths) or "- none"
+    ignored_text = "\n".join(f"- `{path}`" for path in ignored_paths) or "- none"
+    uncertain_text = "\n".join(f"- `{path}`" for path in uncertain_paths) or "- none"
     categories_text = ", ".join(categories) if categories else "none"
     _write_summary(
         "# XGrowthIntelligence — Upstream Watch\n\n"
         "Owner: **SamAlpha1** · X: **@samalpha_**\n\n"
         f"Commit: `{snapshot.sha}`  \n"
         f"Committed: `{snapshot.committed_at}`  \n"
-        f"Tracked categories: **{categories_text}**\n\n"
-        f"{files}\n\n"
-        "Changed paths are evidence of code movement only; no ranking weight is inferred automatically.\n"
+        f"Meaningful source categories: **{categories_text}**\n\n"
+        "## Meaningful source changes\n"
+        f"{meaningful_text}\n\n"
+        "## Ignored metadata/comment-only changes\n"
+        f"{ignored_text}\n\n"
+        "## Patch unavailable / uncertain\n"
+        f"{uncertain_text}\n\n"
+        "No ranking effect or weight is inferred automatically from a source change.\n"
     )
     return 0
 
