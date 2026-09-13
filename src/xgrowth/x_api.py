@@ -15,6 +15,10 @@ class XApiError(RuntimeError):
 
 class XReadOnlyClient:
     BASE_URL = "https://api.x.com/2"
+    USER_FIELDS = (
+        "created_at,description,public_metrics,verified,verified_type,"
+        "verified_followers_count,subscription_type,affiliation"
+    )
 
     def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None) -> None:
         self.settings = settings
@@ -59,9 +63,7 @@ class XReadOnlyClient:
         clean = username.strip().lstrip("@")
         return self._get(
             f"/users/by/username/{clean}",
-            params={
-                "user.fields": "created_at,description,public_metrics,verified,verified_type",
-            },
+            params={"user.fields": self.USER_FIELDS},
         )
 
     def get_recent_tweets(self, user_id: str, max_results: int = 10) -> dict[str, Any]:
@@ -74,3 +76,39 @@ class XReadOnlyClient:
                 "tweet.fields": "created_at,public_metrics,possibly_sensitive",
             },
         )
+
+    def get_followers_page(
+        self,
+        user_id: str,
+        max_results: int = 100,
+        pagination_token: str | None = None,
+    ) -> dict[str, Any]:
+        bounded = min(max(int(max_results), 1), 1000)
+        params: dict[str, Any] = {
+            "max_results": bounded,
+            "user.fields": self.USER_FIELDS,
+        }
+        if pagination_token:
+            params["pagination_token"] = pagination_token
+        return self._get(f"/users/{user_id}/followers", params=params)
+
+    def get_followers_bounded(
+        self,
+        user_id: str,
+        max_pages: int = 2,
+        page_size: int = 100,
+    ) -> list[dict[str, Any]]:
+        pages = min(max(int(max_pages), 1), 5)
+        followers: list[dict[str, Any]] = []
+        token: str | None = None
+        for _ in range(pages):
+            payload = self.get_followers_page(user_id, max_results=page_size, pagination_token=token)
+            data = payload.get("data") or []
+            if isinstance(data, list):
+                followers.extend(item for item in data if isinstance(item, dict))
+            meta = payload.get("meta") or {}
+            next_token = meta.get("next_token")
+            if not next_token:
+                break
+            token = str(next_token)
+        return followers
