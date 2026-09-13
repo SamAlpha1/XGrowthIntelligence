@@ -9,5 +9,9 @@ venv/
 !.env.example
 artifacts/
 reports/private/
+metrics-snapshot.json
+daily-report.json
+smart-followers.json
+upstream-snapshot.json
 *.log
 .DS_Store
