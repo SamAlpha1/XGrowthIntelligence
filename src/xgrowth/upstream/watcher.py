@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from .semantic_diff import classify_patch
+
 
 UPSTREAM_REPO = "xai-org/x-algorithm"
 TRACKED_PREFIXES = (
@@ -26,6 +28,7 @@ class UpstreamSnapshot:
     committed_at: str
     message: str
     relevant_files: tuple[str, ...]
+    change_evidence: tuple[dict[str, Any], ...]
     checked_at: str
 
     def as_dict(self) -> dict[str, Any]:
@@ -35,6 +38,7 @@ class UpstreamSnapshot:
             "committed_at": self.committed_at,
             "message": self.message,
             "relevant_files": list(self.relevant_files),
+            "change_evidence": list(self.change_evidence),
             "checked_at": self.checked_at,
         }
 
@@ -57,13 +61,27 @@ def fetch_latest_snapshot(token: str | None = None, timeout: float = 15.0) -> Up
         detail.raise_for_status()
         payload = detail.json()
 
-    files = tuple(
-        sorted(
-            file_info["filename"]
-            for file_info in payload.get("files", [])
-            if is_relevant_path(file_info.get("filename", ""))
+    relevant_items = [
+        file_info
+        for file_info in payload.get("files", [])
+        if is_relevant_path(file_info.get("filename", ""))
+    ]
+    relevant_items.sort(key=lambda item: str(item.get("filename", "")))
+    files = tuple(str(item.get("filename", "")) for item in relevant_items)
+    evidence: list[dict[str, Any]] = []
+    for item in relevant_items:
+        path = str(item.get("filename", ""))
+        semantic = classify_patch(path, item.get("patch"))
+        evidence.append(
+            {
+                "source_path": path,
+                "status": item.get("status"),
+                "additions": item.get("additions"),
+                "deletions": item.get("deletions"),
+                **semantic,
+            }
         )
-    )
+
     committed_at = payload.get("commit", {}).get("committer", {}).get("date", "")
     message = payload.get("commit", {}).get("message", "")
     checked_at = datetime.now(timezone.utc).isoformat()
@@ -72,5 +90,6 @@ def fetch_latest_snapshot(token: str | None = None, timeout: float = 15.0) -> Up
         committed_at=committed_at,
         message=message,
         relevant_files=files,
+        change_evidence=tuple(evidence),
         checked_at=checked_at,
     )
