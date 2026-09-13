@@ -1,0 +1,42 @@
+name: X Metrics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+      X_USERNAME: samalpha_
+      X_TARGET_KEYWORDS: crypto,trading,python,github
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e .
+
+      - name: Collect read-only metrics
+        run: xgrowth metrics
+
+      - name: Preserve private analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xgrowth-report
+          path: |
+            metrics-snapshot.json
+            daily-report.json
+            smart-followers.json
+          retention-days: 7
+          if-no-files-found: error
