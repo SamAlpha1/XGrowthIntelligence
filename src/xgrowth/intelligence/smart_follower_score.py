@@ -54,5 +54,46 @@ def score_smart_follower(
         "raw_score": round(raw * 100, 2),
         "risk_penalty": round(penalty * 100, 2),
         "components": {key: round(value * 100, 2) for key, value in weighted_parts.items()},
+        "evidence_coverage": 1.0,
         "explanation": "Internal project heuristic; not an upstream X ranking weight.",
+    }
+
+
+def score_partial_features(
+    features: dict[str, float | None],
+    spam_risk: float = 0.0,
+    weights: dict[str, float] | None = None,
+    risk_penalty_max: float = 0.35,
+) -> dict[str, object]:
+    active = weights or DEFAULT_WEIGHTS
+    available = {
+        name: _bounded(value)
+        for name, value in features.items()
+        if name in active and value is not None
+    }
+    available_weight = sum(active[name] for name in available)
+    total_weight = sum(active.values())
+    if available_weight <= 0:
+        return {
+            "score": 0.0,
+            "raw_score": 0.0,
+            "risk_penalty": 0.0,
+            "components": {},
+            "evidence_coverage": 0.0,
+            "missing_features": sorted(active),
+            "explanation": "Insufficient evidence for a project heuristic score.",
+        }
+
+    parts = {name: available[name] * active[name] for name in available}
+    normalized_raw = sum(parts.values()) / available_weight
+    penalty = _bounded(spam_risk) * max(0.0, min(risk_penalty_max, 1.0))
+    final = max(0.0, min(normalized_raw - penalty, 1.0))
+    return {
+        "score": round(final * 100, 2),
+        "raw_score": round(normalized_raw * 100, 2),
+        "risk_penalty": round(penalty * 100, 2),
+        "components": {key: round(value * 100, 2) for key, value in parts.items()},
+        "evidence_coverage": round(available_weight / max(total_weight, 1e-9), 4),
+        "missing_features": sorted(set(active) - set(available)),
+        "explanation": "Evidence-normalized project heuristic; missing features are not imputed.",
     }
